@@ -93,11 +93,11 @@ func main() {
 						doc := bson.M{
 							"$set": bson.M{"addr": addr},
 							"$addToSet": bson.M{
-								"labels": bson.M{
-									"name": walletName, 
+								"labels": bson.A{bson.M{
+									"name": walletName,
 									"type": walletType,
-									"src": "walletExplorer",
-								},
+									"src":  "walletExplorer",
+								}},
 							},
 						}
 
