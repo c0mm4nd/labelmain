@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/antchfx/htmlquery v1.3.0
+	github.com/jellydator/ttlcache/v3 v3.0.2-0.20230530103303-c619bbdcc120
 	github.com/joho/godotenv v1.5.1
 	go.mongodb.org/mongo-driver v1.11.7
 )

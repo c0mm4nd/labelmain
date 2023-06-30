@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/antchfx/htmlquery"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -38,6 +39,10 @@ var initFlag = flag.Bool("init", true, "init redis db by interval loading pages"
 
 var defaultLastSleep = 5 * time.Second
 var lastSleep = 5 * time.Second
+
+var cache = ttlcache.New[string, struct{}](
+	ttlcache.WithTTL[string, struct{}](12 * time.Hour),
+)
 
 func main() {
 	flag.Parse()
@@ -209,6 +214,11 @@ func loadDetailThread(coll *mongo.Collection, workerCh chan string) {
 	// for _, addr := range members {
 	for {
 		addr := <-workerCh
+
+		if cache.Has(addr) {
+			log.Printf("pass %s", addr)
+			continue
+		}
 
 		log.Printf("checking %s", addr)
 		details := loadDetail(addr)
