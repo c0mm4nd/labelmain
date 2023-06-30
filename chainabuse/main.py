@@ -5,7 +5,7 @@ import requests
 from pymongo import MongoClient
 from dotenv import load_dotenv # pip install python-dotenv
 
-def get_50_reports_after_cursor(cur):
+def get_50_reports_after_cursor(cur=None):
     # resp after cur # not included
     data = {
         "operationName": "GetReports",
@@ -50,6 +50,7 @@ if __name__ == "__main__":
 
     cur = None
     result = get_50_reports_after_cursor()
+    page = 0
     while has_next(result):
         time.sleep(2)
         cur = result["data"]["reports"]["pageInfo"]["endCursor"]
@@ -58,7 +59,11 @@ if __name__ == "__main__":
             upsert_report(coll, report)
 
         result = get_50_reports_after_cursor(cur)
+
+        print("done page {}: {}".format(page, len(result["data"]["reports"]["edges"])))
+        page += 1
     
+    print("done initial load")
     cur = None # reset cur
     while True:
         time.sleep(3600)
