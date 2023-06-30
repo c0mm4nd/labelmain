@@ -243,6 +243,8 @@ func loadDetailThread(coll *mongo.Collection, workerCh chan string) {
 		result, err := coll.UpdateOne(ctx, bson.M{"addr": addr}, bson.M{"$set": addrDoc}, opts)
 		chk(err)
 
+		cache.Set(addr, struct{}{}, 12*time.Hour)
+
 		fmt.Printf("Number of documents updated: %v\n", result.ModifiedCount)
 		fmt.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
 	}
