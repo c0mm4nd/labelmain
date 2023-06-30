@@ -75,7 +75,7 @@ func main() {
 	fmt.Println("Pinged your deployment. You successfully connected to MongoDB!")
 
 	db := client.Database("labels")
-	coll := db.Collection("bitcoinAbuse")
+	coll := db.Collection("bitcoinLabels")
 
 	workerCh := make(chan string, 0)
 	go loadDetailThread(coll, workerCh)
@@ -227,16 +227,18 @@ func loadDetailThread(coll *mongo.Collection, workerCh chan string) {
 
 		for _, detail := range details {
 			reportDoc := &bson.M{
+				"name": "abuse",
 				"date": detail[0],
 				"type": detail[1],
 				"desc": detail[2],
+				"src":  "bitcoinAbuse",
 			}
 			reports = append(reports, reportDoc)
 		}
 
 		addrDoc := bson.M{
-			"addr":    addr,
-			"reports": reports,
+			"addr":   addr,
+			"labels": reports,
 		}
 
 		opts := options.Update().SetUpsert(true)

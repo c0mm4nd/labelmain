@@ -71,7 +71,7 @@ func main() {
 	fmt.Println("Pinged your deployment. You successfully connected to MongoDB!")
 
 	db := client.Database("labels")
-	coll := db.Collection("walletExplorer")
+	coll := db.Collection("bitcoinLabels")
 
 	walletMap := loadWalletMap()
 	upsert := options.Update().SetUpsert(true)
@@ -86,19 +86,28 @@ func main() {
 					continue
 				}
 
-				addrs := loadAddrsByWalletName(walletName)
-				for _, addr := range addrs {
-					doc := bson.M{
-						"$set":      bson.M{"addr": addr},
-						"$addToSet": bson.M{"names": []string{walletName}, "types": []string{walletType}},
-					}
+				go func(ctx context.Context, walletName string) {
+					addrs := loadAddrsByWalletName(walletName)
 
-					result, err := coll.UpdateOne(ctx, bson.M{"addr": addr}, doc, upsert)
-					chk(err)
-					log.Printf("Number of documents updated: %v\n", result.ModifiedCount)
-					log.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
-				}
-				log.Printf("done %s", walletName)
+					for _, addr := range addrs {
+						doc := bson.M{
+							"$set": bson.M{"addr": addr},
+							"$addToSet": bson.M{
+								"labels": bson.M{
+									"name": walletName, 
+									"type": walletType,
+									"src": "walletExplorer",
+								},
+							},
+						}
+
+						result, err := coll.UpdateOne(ctx, bson.M{"addr": addr}, doc, upsert)
+						chk(err)
+						log.Printf("Number of documents updated: %v\n", result.ModifiedCount)
+						log.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
+					}
+					log.Printf("done %s", walletName)
+				}(ctx, walletName)
 			}
 
 			log.Printf("done %s", walletType)
