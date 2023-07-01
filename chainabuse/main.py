@@ -27,9 +27,18 @@ def get_50_reports_after_cursor(cur=None):
     if cur is not None:
         data["variables"]["after"] = cur
 
-    # resp = requests.get(f"https://www.chainabuse.com/_next/data/j3-H6M1pCzjCE2fyV6qUM/en/reports.json?page={page_num}")
-    resp = requests.post("https://www.chainabuse.com/api/graphql-proxy", json=data)
-    return resp.json()
+    resp = None
+    while True:
+        try:
+            resp = requests.post("https://www.chainabuse.com/api/graphql-proxy", json=data)
+            ret = resp.json()
+            return ret
+        except Exception as e:
+            if resp is not None:
+                print(resp.text)
+            print(e)
+
+    
 
 def has_next(result):
     if result["data"]["reports"].get("pageInfo") is None:
