@@ -37,6 +37,7 @@ def get_50_reports_after_cursor(cur=None):
             if resp is not None:
                 print(resp.text)
             print(e)
+            time.sleep(10)
 
     
 
