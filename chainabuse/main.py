@@ -62,11 +62,11 @@ if __name__ == "__main__":
     total_matched = 0
     while True:
         chainabuse_result = get_50_reports_after_cursor(cur)
-        if chainabuse_result.get("data") is None:
+        if chainabuse_result.get("data") is None:  # when TOO MANY REQUESTS
             print(f"from {cur}, chainabuse_result has no data")
             with open(f"error_{time.time()}.log", "w") as f:
                 json.dump(chainabuse_result, f)
-            time.sleep(60)
+            time.sleep(3600)
             continue
 
         if chainabuse_result["data"].get("reports") is None:
