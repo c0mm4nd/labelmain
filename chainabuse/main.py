@@ -42,9 +42,6 @@ def get_50_reports_after_cursor(cur=None):
 
 
 def has_next(result):
-    if result is None:
-        return True  # means start
-
     if result["data"]["reports"].get("pageInfo") is None:
         return False
 
@@ -64,48 +61,52 @@ if __name__ == "__main__":
     total_modified = 0
     total_matched = 0
     while True:
-        if has_next(chainabuse_result):
-            chainabuse_result = get_50_reports_after_cursor(cur)
-            if chainabuse_result.get("data") is None:
-                print(f"from {cur}, chainabuse_result has no data")
-                with open(f"error_{time.time()}.log", "w") as f:
-                    json.dump(chainabuse_result, f)
-                time.sleep(60)
-                continue
+        chainabuse_result = get_50_reports_after_cursor(cur)
+        if chainabuse_result.get("data") is None:
+            print(f"from {cur}, chainabuse_result has no data")
+            with open(f"error_{time.time()}.log", "w") as f:
+                json.dump(chainabuse_result, f)
+            time.sleep(60)
+            continue
 
-            if chainabuse_result["data"].get("reports") is None:
-                print(f"from {cur}, chainabuse_result has no reports")
-                with open(f"error_{time.time()}.log", "w") as f:
-                    json.dump(chainabuse_result, f)
-                time.sleep(600)
-                continue
+        if chainabuse_result["data"].get("reports") is None:
+            print(f"from {cur}, chainabuse_result has no reports")
+            with open(f"error_{time.time()}.log", "w") as f:
+                json.dump(chainabuse_result, f)
+            time.sleep(600)
+            continue
 
-            cur = chainabuse_result["data"]["reports"]["pageInfo"]["endCursor"]
-
-            bulk = []
-            for report in chainabuse_result["data"]["reports"]["edges"]:
-                bulk.append(
-                    UpdateOne(
-                        filter={"node.id": report["node"]["id"]},
-                        update={"$set": report},
-                        upsert=True,
-                    )
-                )
-            mongo_result = coll.bulk_write(requests=bulk)
-            total_upserted += mongo_result.upserted_count
-            total_modified += mongo_result.modified_count
-            total_matched +=  mongo_result.matched_count
-
-            print(
-                "done: upserted {}/{}, modified {}/{}, matched: {}/{}".format(
-                    mongo_result.upserted_count,
-                    total_upserted,
-                    mongo_result.modified_count,
-                    total_modified,
-                    mongo_result.matched_count,
-                    total_matched,
+        bulk = []
+        for report in chainabuse_result["data"]["reports"]["edges"]:
+            bulk.append(
+                UpdateOne(
+                    filter={"node.id": report["node"]["id"]},
+                    update={"$set": report},
+                    upsert=True,
                 )
             )
+        mongo_result = coll.bulk_write(requests=bulk)
+        total_upserted += mongo_result.upserted_count
+        total_modified += mongo_result.modified_count
+        total_matched += mongo_result.matched_count
+
+        print(
+            "done: upserted {}/{}, modified {}/{}, matched: {}/{}".format(
+                mongo_result.upserted_count,
+                total_upserted,
+                mongo_result.modified_count,
+                total_modified,
+                mongo_result.matched_count,
+                total_matched,
+            )
+        )
+
+        next_cur = chainabuse_result["data"]["reports"]["pageInfo"].get("endCursor")
+        if next_cur is not None:
+            cur = next_cur
+
+        if has_next(chainabuse_result):
+            continue
         else:
             print("updated to latest")
             time.sleep(3600)
