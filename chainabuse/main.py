@@ -32,6 +32,16 @@ def get_50_reports_after_cursor(cur=None):
         try:
             resp = requests.post("https://www.chainabuse.com/api/graphql-proxy", json=data)
             ret = resp.json()
+            if ret.get("data") is None:
+                print(ret)
+                time.sleep(10)
+                continue
+
+            if ret["data"].get("reports") is None:
+                print(ret)
+                time.sleep(10)
+                continue
+
             return ret
         except Exception as e:
             if resp is not None:
