@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
             result = get_50_reports_after_cursor(cur)
 
-            print("done: {} inserted, {} updated".format(inserted_count, modified_count)))
+            print("done: {} inserted, {} updated".format(inserted_count, modified_count))
         else:
             print("updated to latest")
             time.sleep(3600)
