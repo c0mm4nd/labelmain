@@ -59,30 +59,30 @@ if __name__ == "__main__":
     coll = db["chainAbuse"]
 
     cur = None
-    result = None
+    chainabuse_result = None
     total_inserted = 0
     total_modified = 0
     while True:
-        if has_next(result):
-            result = get_50_reports_after_cursor(cur)
-            if result.get("data") is None:
-                print(f"from {cur}, result has no data")
+        if has_next(chainabuse_result):
+            chainabuse_result = get_50_reports_after_cursor(cur)
+            if chainabuse_result.get("data") is None:
+                print(f"from {cur}, chainabuse_result has no data")
                 with open(f"error_{time.now()}.log", "w") as f:
-                    json.dump(result, f)
+                    json.dump(chainabuse_result, f)
                 time.sleep(60)
                 continue
 
-            if result["data"].get("reports") is None:
-                print(f"from {cur}, result has no reports")
+            if chainabuse_result["data"].get("reports") is None:
+                print(f"from {cur}, chainabuse_result has no reports")
                 with open(f"error_{time.now()}.log", "w") as f:
-                    json.dump(result, f)
+                    json.dump(chainabuse_result, f)
                 time.sleep(600)
                 continue
 
-            cur = result["data"]["reports"]["pageInfo"]["endCursor"]
+            cur = chainabuse_result["data"]["reports"]["pageInfo"]["endCursor"]
 
             bulk = []
-            for report in result["data"]["reports"]["edges"]:
+            for report in chainabuse_result["data"]["reports"]["edges"]:
                 bulk.append(
                     UpdateOne(
                         filter={"node.id": report["node"]["id"]},
@@ -90,15 +90,15 @@ if __name__ == "__main__":
                         upsert=True,
                     )
                 )
-            result = coll.bulk_write(requests=bulk)
-            total_inserted += result.inserted_count
-            total_modified += result.modified_count
+            mongo_result = coll.bulk_write(requests=bulk)
+            total_inserted += mongo_result.inserted_count
+            total_modified += mongo_result.modified_count
 
             print(
                 "done: inserted {}/{}, modified {}/{}".format(
-                    result.inserted_count,
+                    mongo_result.inserted_count,
                     total_inserted,
-                    result.modified_count,
+                    mongo_result.modified_count,
                     total_modified,
                 )
             )
