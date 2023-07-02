@@ -91,12 +91,12 @@ if __name__ == "__main__":
                     )
                 )
             mongo_result = coll.bulk_write(requests=bulk)
-            total_inserted += mongo_result.inserted_count
+            total_inserted += len(mongo_result.upserted_ids)
             total_modified += mongo_result.modified_count
 
             print(
                 "done: inserted {}/{}, modified {}/{}".format(
-                    mongo_result.inserted_count,
+                    len(mongo_result.upserted_ids),
                     total_inserted,
                     mongo_result.modified_count,
                     total_modified,
