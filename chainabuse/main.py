@@ -51,7 +51,7 @@ def has_next(result):
 # %%
 if __name__ == "__main__":
     load_dotenv()
-    client = MongoClient(os.getenv("MONGO_URI"))
+    client = MongoClient(os.getenv("DIRTY_MONGO_URI"))
     db = client["labels"]
     coll = db["chainAbuse"]
 
