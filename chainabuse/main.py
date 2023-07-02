@@ -36,7 +36,7 @@ def get_50_reports_after_cursor(cur=None):
             return ret
         except Exception as e:
             print(f"from {cur}, result is not json")
-            with open(f"error_{time.now()}.log", "w") as f:
+            with open(f"error_{time.time()}.log", "w") as f:
                 f.write(resp.text)
             time.sleep(10)
 
@@ -68,14 +68,14 @@ if __name__ == "__main__":
             chainabuse_result = get_50_reports_after_cursor(cur)
             if chainabuse_result.get("data") is None:
                 print(f"from {cur}, chainabuse_result has no data")
-                with open(f"error_{time.now()}.log", "w") as f:
+                with open(f"error_{time.time()}.log", "w") as f:
                     json.dump(chainabuse_result, f)
                 time.sleep(60)
                 continue
 
             if chainabuse_result["data"].get("reports") is None:
                 print(f"from {cur}, chainabuse_result has no reports")
-                with open(f"error_{time.now()}.log", "w") as f:
+                with open(f"error_{time.time()}.log", "w") as f:
                     json.dump(chainabuse_result, f)
                 time.sleep(600)
                 continue
