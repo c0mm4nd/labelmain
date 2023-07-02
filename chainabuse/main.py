@@ -60,8 +60,9 @@ if __name__ == "__main__":
 
     cur = None
     chainabuse_result = None
-    total_inserted = 0
+    total_upserted = 0
     total_modified = 0
+    total_matched = 0
     while True:
         if has_next(chainabuse_result):
             chainabuse_result = get_50_reports_after_cursor(cur)
@@ -91,15 +92,18 @@ if __name__ == "__main__":
                     )
                 )
             mongo_result = coll.bulk_write(requests=bulk)
-            total_inserted += len(mongo_result.upserted_ids)
+            total_upserted += mongo_result.upserted_count
             total_modified += mongo_result.modified_count
+            total_matched +=  mongo_result.matched_count
 
             print(
-                "done: inserted {}/{}, modified {}/{}".format(
-                    len(mongo_result.upserted_ids),
-                    total_inserted,
+                "done: upserted {}/{}, modified {}/{}, matched: {}/{}".format(
+                    mongo_result.upserted_count,
+                    total_upserted,
                     mongo_result.modified_count,
                     total_modified,
+                    mongo_result.matched_count,
+                    total_matched,
                 )
             )
         else:
