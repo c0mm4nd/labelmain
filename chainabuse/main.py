@@ -36,8 +36,6 @@ def get_50_reports_after_cursor(cur=None):
             return ret
         except Exception as e:
             print(f"from {cur}, result is not json")
-            with open(f"error_{time.time()}.log", "w") as f:
-                f.write(resp.text)
             time.sleep(10)
 
 
