@@ -35,7 +35,7 @@ func retry(err error) bool {
 	return false
 }
 
-var initFlag = flag.Bool("init", true, "init redis db by interval loading pages")
+var initFlag = flag.Bool("init", true, "init mongodb by interval loading pages")
 
 var defaultLastSleep = 5 * time.Second
 var lastSleep = 5 * time.Second
@@ -74,7 +74,6 @@ func main() {
 	coll := db.Collection("bitcoinLabels")
 
 	walletMap := loadWalletMap()
-	upsert := options.Update().SetUpsert(true)
 
 	for {
 		for walletType, walletNames := range walletMap {
@@ -86,9 +85,10 @@ func main() {
 					continue
 				}
 
-				go func(ctx context.Context, walletName string) {
+				go func(ctx context.Context, walletType, walletName string) {
 					addrs := loadAddrsByWalletName(walletName)
 
+					models := make([]mongo.WriteModel, 0, len(addrs))
 					for _, addr := range addrs {
 						doc := bson.M{
 							"$set": bson.M{"addr": addr},
@@ -101,13 +101,18 @@ func main() {
 							},
 						}
 
-						result, err := coll.UpdateOne(ctx, bson.M{"addr": addr}, doc, upsert)
-						chk(err)
-						log.Printf("Number of documents updated: %v\n", result.ModifiedCount)
-						log.Printf("Number of documents upserted: %v\n", result.UpsertedCount)
+						model := mongo.NewUpdateOneModel()
+						model.SetUpsert(true)
+						model.SetFilter(bson.M{"addr": addr})
+						model.SetUpdate(doc)
+						models = append(models, model)
 					}
-					log.Printf("done %s", walletName)
-				}(ctx, walletName)
+
+					results, err := coll.BulkWrite(ctx, models)
+					chk(err)
+
+					log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+				}(ctx, walletType, walletName)
 			}
 
 			log.Printf("done %s", walletType)

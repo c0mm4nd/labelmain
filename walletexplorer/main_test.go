@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadAllWallets(t *testing.T) {
-	fmt.Println(loadWalletMap())
+	t.Log(loadWalletMap())
 }
 
 func TestLoadWalletAddrs(t *testing.T) {
