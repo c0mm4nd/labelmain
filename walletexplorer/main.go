@@ -38,7 +38,6 @@ func retry(err error) bool {
 var initFlag = flag.Bool("init", true, "init mongodb by interval loading pages")
 
 var defaultLastSleep = 5 * time.Second
-var lastSleep = 5 * time.Second
 
 func main() {
 	flag.Parse()
@@ -132,6 +131,8 @@ func loadAddrsByWalletName(walletName string) []string {
 	addrs := make([]string, 0)
 
 	for ; ; page += 1 {
+		lastSleep := defaultLastSleep
+
 		url := fmt.Sprintf("https://www.walletexplorer.com/wallet/%s/addresses?page=%d", walletName, page)
 	ADDR_LIST_RETRY:
 		req, _ := http.NewRequest("GET", url, nil)
@@ -142,7 +143,7 @@ func loadAddrsByWalletName(walletName string) []string {
 
 		resp, err := http.DefaultClient.Do(req)
 		if retry(err) {
-			lastSleep += defaultLastSleep
+			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
 
@@ -151,7 +152,7 @@ func loadAddrsByWalletName(walletName string) []string {
 
 		body, err := io.ReadAll(resp.Body)
 		if retry(err) {
-			lastSleep += defaultLastSleep
+			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
 
@@ -159,7 +160,7 @@ func loadAddrsByWalletName(walletName string) []string {
 		}
 
 		if bytes.Contains(body, []byte("limit")) {
-			lastSleep += defaultLastSleep
+			lastSleep += lastSleep
 			log.Println("sleep due to limit", lastSleep)
 			time.Sleep(lastSleep)
 
@@ -167,7 +168,7 @@ func loadAddrsByWalletName(walletName string) []string {
 		}
 
 		if bytes.Contains(body, []byte("Too many requests")) {
-			lastSleep += defaultLastSleep
+			lastSleep += lastSleep
 			log.Println("sleep due to limit", lastSleep)
 			time.Sleep(lastSleep)
 
@@ -176,7 +177,7 @@ func loadAddrsByWalletName(walletName string) []string {
 
 		doc, err := htmlquery.Parse(bytes.NewBuffer(body))
 		if retry(err) {
-			lastSleep += defaultLastSleep
+			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
 
