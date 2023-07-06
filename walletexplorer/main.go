@@ -91,7 +91,12 @@ func main() {
 
 				wg.Add(1)
 				go func(ctx context.Context, walletType, walletName string) {
+					defer wg.Done()
 					addrs := loadAddrsByWalletName(walletName)
+					if len(addrs) == 0 {
+						log.Printf("failed to load address from %s.%s", walletType, walletName)
+						return
+					}
 
 					models := make([]mongo.WriteModel, 0, len(addrs))
 					for _, addr := range addrs {
@@ -117,11 +122,8 @@ func main() {
 					chk(err)
 
 					log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
-					wg.Done()
 				}(ctx, walletType, walletName)
 			}
-
-			log.Printf("done %s", walletType)
 		}
 
 		wg.Wait()
