@@ -37,7 +37,7 @@ func retry(err error) bool {
 
 var initFlag = flag.Bool("init", true, "init mongodb by interval loading pages")
 
-var defaultLastSleep = 5 * time.Second
+var defaultLastSleep = 20 * time.Second
 
 func main() {
 	flag.Parse()
@@ -143,43 +143,43 @@ func loadAddrsByWalletName(walletName string) []string {
 
 		resp, err := http.DefaultClient.Do(req)
 		if retry(err) {
-			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
+			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if retry(err) {
-			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
+			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
 
 		if bytes.Contains(body, []byte("limit")) {
-			lastSleep += lastSleep
 			log.Println("sleep due to limit", lastSleep)
 			time.Sleep(lastSleep)
+			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
 
 		if bytes.Contains(body, []byte("Too many requests")) {
-			lastSleep += lastSleep
-			log.Println("sleep due to limit", lastSleep)
+			log.Println("sleep due to too many requests", lastSleep)
 			time.Sleep(lastSleep)
+			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
 
 		doc, err := htmlquery.Parse(bytes.NewBuffer(body))
 		if retry(err) {
-			lastSleep += lastSleep
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
+			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
@@ -213,8 +213,9 @@ LOAD_ALL_RETRY:
 	resp, err := http.DefaultClient.Do(req)
 	doc, err := htmlquery.Parse(resp.Body)
 	if retry(err) {
-		lastSleep += lastSleep
 		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
 		goto LOAD_ALL_RETRY
 	}
 
