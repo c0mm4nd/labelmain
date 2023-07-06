@@ -13,3 +13,8 @@ func TestLoadWalletAddrs(t *testing.T) {
 
 	fmt.Println(loadAddrsByWalletName("CoinJar.com"))
 }
+
+func TestLoadWalletAddrs1(t *testing.T) {
+
+	fmt.Println(loadAddrsByWalletName("HelixMixer-old32"))
+}

@@ -11,7 +11,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/antchfx/htmlquery"
@@ -75,11 +74,11 @@ func main() {
 	coll := db.Collection("bitcoinLabels")
 
 	walletMap := loadWalletMap()
+	log.Println(walletMap)
 
 	ticker := time.NewTicker(8 * time.Hour)
 
 	for {
-		wg := sync.WaitGroup{}
 		for walletType, walletNames := range walletMap {
 			log.Println(strings.Join(walletNames, ", "))
 
@@ -89,44 +88,39 @@ func main() {
 					continue
 				}
 
-				wg.Add(1)
-				go func(ctx context.Context, walletType, walletName string) {
-					defer wg.Done()
-					addrs := loadAddrsByWalletName(walletName)
-					if len(addrs) == 0 {
-						log.Printf("failed to load address from %s.%s", walletType, walletName)
-						return
+				addrs := loadAddrsByWalletName(walletName)
+				if len(addrs) == 0 {
+					log.Printf("failed to load address from %s.%s", walletType, walletName)
+					return
+				}
+
+				models := make([]mongo.WriteModel, 0, len(addrs))
+				for _, addr := range addrs {
+					doc := bson.M{
+						"$set": bson.M{"addr": addr},
+						"$addToSet": bson.M{
+							"labels": bson.A{bson.M{
+								"name": walletName,
+								"type": walletType,
+								"src":  "walletExplorer",
+							}},
+						},
 					}
 
-					models := make([]mongo.WriteModel, 0, len(addrs))
-					for _, addr := range addrs {
-						doc := bson.M{
-							"$set": bson.M{"addr": addr},
-							"$addToSet": bson.M{
-								"labels": bson.A{bson.M{
-									"name": walletName,
-									"type": walletType,
-									"src":  "walletExplorer",
-								}},
-							},
-						}
+					model := mongo.NewUpdateOneModel()
+					model.SetUpsert(true)
+					model.SetFilter(bson.M{"addr": addr})
+					model.SetUpdate(doc)
+					models = append(models, model)
+				}
 
-						model := mongo.NewUpdateOneModel()
-						model.SetUpsert(true)
-						model.SetFilter(bson.M{"addr": addr})
-						model.SetUpdate(doc)
-						models = append(models, model)
-					}
+				results, err := coll.BulkWrite(ctx, models)
+				chk(err)
 
-					results, err := coll.BulkWrite(ctx, models)
-					chk(err)
-
-					log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
-				}(ctx, walletType, walletName)
+				log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
 			}
 		}
 
-		wg.Wait()
 		log.Println("today done")
 
 		<-ticker.C
@@ -165,6 +159,14 @@ func loadAddrsByWalletName(walletName string) []string {
 		}
 
 		if bytes.Contains(body, []byte("limit")) {
+			lastSleep += defaultLastSleep
+			log.Println("sleep due to limit", lastSleep)
+			time.Sleep(lastSleep)
+
+			goto ADDR_LIST_RETRY
+		}
+
+		if bytes.Contains(body, []byte("Too many requests")) {
 			lastSleep += defaultLastSleep
 			log.Println("sleep due to limit", lastSleep)
 			time.Sleep(lastSleep)
