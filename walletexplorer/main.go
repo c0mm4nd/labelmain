@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/antchfx/htmlquery"
@@ -75,7 +76,10 @@ func main() {
 
 	walletMap := loadWalletMap()
 
+	ticker := time.NewTicker(8 * time.Hour)
+
 	for {
+		wg := sync.WaitGroup{}
 		for walletType, walletNames := range walletMap {
 			log.Println(strings.Join(walletNames, ", "))
 
@@ -85,6 +89,7 @@ func main() {
 					continue
 				}
 
+				wg.Add(1)
 				go func(ctx context.Context, walletType, walletName string) {
 					addrs := loadAddrsByWalletName(walletName)
 
@@ -112,14 +117,17 @@ func main() {
 					chk(err)
 
 					log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+					wg.Done()
 				}(ctx, walletType, walletName)
 			}
 
 			log.Printf("done %s", walletType)
 		}
 
+		wg.Wait()
 		log.Println("today done")
-		time.Sleep(24 * time.Hour)
+
+		<-ticker.C
 	}
 }
 
