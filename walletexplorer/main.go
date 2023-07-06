@@ -199,6 +199,8 @@ func loadAddrsByWalletName(walletName string) []string {
 }
 
 func loadWalletMap() map[string][]string {
+	lastSleep := defaultLastSleep
+
 	wallets := make(map[string][]string)
 
 	url := fmt.Sprintf("https://www.walletexplorer.com/")
@@ -211,7 +213,7 @@ LOAD_ALL_RETRY:
 	resp, err := http.DefaultClient.Do(req)
 	doc, err := htmlquery.Parse(resp.Body)
 	if retry(err) {
-		lastSleep += defaultLastSleep
+		lastSleep += lastSleep
 		time.Sleep(lastSleep)
 		goto LOAD_ALL_RETRY
 	}
