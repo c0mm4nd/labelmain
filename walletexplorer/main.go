@@ -190,6 +190,8 @@ func loadAddrsByWalletName(walletName string) []string {
 			addrs = append(addrs, addr)
 		}
 
+		log.Printf("fetched %d addrs from %s.%d", len(tds), walletName, page)
+
 		if len(tds) < 100 {
 			break
 		}
