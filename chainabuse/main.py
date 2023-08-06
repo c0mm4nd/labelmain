@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
         bulk = []
         if len(chainabuse_result["data"]["reports"]["edges"]) == 0:
-            print("no more reports")
+            print(f"no more reports, cur {cur}")
             time.sleep(3600)
 
         for report in chainabuse_result["data"]["reports"]["edges"]:
@@ -111,5 +111,5 @@ if __name__ == "__main__":
         if has_next(chainabuse_result):
             continue
         else:
-            print("updated to latest")
+            print(f"updated to latest, cur: {cur}")
             time.sleep(3600)
