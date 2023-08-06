@@ -75,6 +75,10 @@ if __name__ == "__main__":
             continue
 
         bulk = []
+        if len(chainabuse_result["data"]["reports"]["edges"]) == 0:
+            print("no more reports")
+            time.sleep(3600)
+
         for report in chainabuse_result["data"]["reports"]["edges"]:
             bulk.append(
                 UpdateOne(
@@ -83,6 +87,7 @@ if __name__ == "__main__":
                     upsert=True,
                 )
             )
+
         mongo_result = coll.bulk_write(requests=bulk)
         total_upserted += mongo_result.upserted_count
         total_modified += mongo_result.modified_count
