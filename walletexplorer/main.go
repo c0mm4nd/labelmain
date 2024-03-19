@@ -35,8 +35,6 @@ func retry(err error) bool {
 	return false
 }
 
-var initFlag = flag.Bool("init", true, "init mongodb by interval loading pages")
-
 var defaultLastSleep = 20 * time.Second
 
 func main() {
@@ -87,36 +85,73 @@ func main() {
 					continue
 				}
 
-				addrs := loadAddrsByWalletName(walletName)
-				if len(addrs) == 0 {
-					log.Printf("failed to load address from %s.%s", walletType, walletName)
-					return
-				}
+				pageNum := uint32(1)
 
-				models := make([]mongo.WriteModel, 0, len(addrs))
-				for _, addr := range addrs {
-					doc := bson.M{
-						"$set": bson.M{"addr": addr},
-						"$addToSet": bson.M{
-							"labels": bson.A{bson.M{
-								"name": walletName,
-								"type": walletType,
-								"src":  "walletExplorer",
-							}},
-						},
+				// addrs := loadAddrsByWalletName(walletName)
+				// if len(addrs) == 0 {
+				// 	log.Printf("failed to load address from %s.%s", walletType, walletName)
+				// 	return
+				// }
+
+				// models := make([]mongo.WriteModel, 0, len(addrs))
+				// for _, addr := range addrs {
+				// 	doc := bson.M{
+				// 		"$set": bson.M{"addr": addr},
+				// 		"$addToSet": bson.M{
+				// 			"labels": bson.A{bson.M{
+				// 				"name": walletName,
+				// 				"type": walletType,
+				// 				"src":  "walletExplorer",
+				// 			}},
+				// 		},
+				// 	}
+
+				// 	model := mongo.NewUpdateOneModel()
+				// 	model.SetUpsert(true)
+				// 	model.SetFilter(bson.M{"addr": addr})
+				// 	model.SetUpdate(doc)
+				// 	models = append(models, model)
+				// }
+
+				// results, err := coll.BulkWrite(ctx, models)
+				// chk(err)
+				for ; ; pageNum += 1 {
+					addrs := loadAddrsByWalletNameAndPageNum(walletName, pageNum)
+					models := make([]mongo.WriteModel, 0, len(addrs))
+					for _, addr := range addrs {
+						doc := bson.M{
+							"$set": bson.M{"addr": addr},
+							"$addToSet": bson.M{
+								"labels": bson.A{bson.M{
+									"name": walletName,
+									"type": walletType,
+									"src":  "walletExplorer",
+								}},
+							},
+						}
+
+						model := mongo.NewUpdateOneModel()
+						model.SetUpsert(true)
+						model.SetFilter(bson.M{"addr": addr})
+						model.SetUpdate(doc)
+						models = append(models, model)
+
+						results, err := coll.BulkWrite(ctx, models)
+						chk(err)
+
+						log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+
+						if len(addrs) < 100 {
+							goto NEXT_WALLET
+						}
 					}
 
-					model := mongo.NewUpdateOneModel()
-					model.SetUpsert(true)
-					model.SetFilter(bson.M{"addr": addr})
-					model.SetUpdate(doc)
-					models = append(models, model)
+					log.Printf("fetched %d addrs from %s.%d", len(addrs), walletName, pageNum)
 				}
 
-				results, err := coll.BulkWrite(ctx, models)
-				chk(err)
+			NEXT_WALLET:
 
-				log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+				log.Printf("done %s.%s", walletType, walletName)
 			}
 		}
 
@@ -126,6 +161,7 @@ func main() {
 	}
 }
 
+// deprecated: will OOM here due to toooo large addrs
 func loadAddrsByWalletName(walletName string) []string {
 	page := 1
 	addrs := make([]string, 0)
@@ -200,12 +236,84 @@ func loadAddrsByWalletName(walletName string) []string {
 	return addrs
 }
 
+func loadAddrsByWalletNameAndPageNum(walletName string, pageNum uint32) []string {
+	addrs := make([]string, 0)
+
+	lastSleep := defaultLastSleep
+
+	url := fmt.Sprintf("https://www.walletexplorer.com/wallet/%s/addresses?page=%d", walletName, pageNum)
+ADDR_LIST_RETRY:
+	req, _ := http.NewRequest("GET", url, nil)
+	// avoid limit
+	req.Header.Set("Host", "www.walletexplorer.com")
+	req.Header.Set("Referer", url)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+
+	resp, err := http.DefaultClient.Do(req)
+	if retry(err) {
+		log.Println("sleep", lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto ADDR_LIST_RETRY
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if retry(err) {
+		log.Println("sleep", lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto ADDR_LIST_RETRY
+	}
+
+	if bytes.Contains(body, []byte("limit")) {
+		log.Println("sleep due to limit", lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto ADDR_LIST_RETRY
+	}
+
+	if bytes.Contains(body, []byte("Too many requests")) {
+		log.Println("sleep due to too many requests", lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto ADDR_LIST_RETRY
+	}
+
+	doc, err := htmlquery.Parse(bytes.NewBuffer(body))
+	if retry(err) {
+		log.Println("sleep", lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto ADDR_LIST_RETRY
+	}
+
+	tds := htmlquery.Find(doc, "//table/tbody/tr/td[1]")
+	for _, td := range tds {
+		addr := htmlquery.InnerText(td)
+		addrs = append(addrs, addr)
+	}
+
+	log.Printf("fetched %d addrs from %s.%d", len(tds), walletName, pageNum)
+
+	// 	if len(tds) < 100 {
+	// 		break
+	// 	}
+	// }
+
+	return addrs
+}
+
 func loadWalletMap() map[string][]string {
 	lastSleep := defaultLastSleep
 
 	wallets := make(map[string][]string)
 
-	url := fmt.Sprintf("https://www.walletexplorer.com/")
+	url := "https://www.walletexplorer.com/"
 LOAD_ALL_RETRY:
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Host", "www.walletexplorer.com")
@@ -213,6 +321,12 @@ LOAD_ALL_RETRY:
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
+	if retry(err) {
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+
+		goto LOAD_ALL_RETRY
+	}
 	doc, err := htmlquery.Parse(resp.Body)
 	if retry(err) {
 		time.Sleep(lastSleep)
