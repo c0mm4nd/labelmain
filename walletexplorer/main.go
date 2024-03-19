@@ -135,15 +135,14 @@ func main() {
 						model.SetFilter(bson.M{"addr": addr})
 						model.SetUpdate(doc)
 						models = append(models, model)
+					}
 
-						results, err := coll.BulkWrite(ctx, models)
-						chk(err)
+					results, err := coll.BulkWrite(ctx, models)
+					chk(err)
 
-						log.Printf("%s.%s: %d matched, %d upserted, %d modified", walletType, walletName, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
-
-						if len(addrs) < 100 {
-							goto NEXT_WALLET
-						}
+					log.Printf("%s.%s.%d: %d matched, %d upserted, %d modified", walletType, walletName, pageNum, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+					if len(addrs) < 100 {
+						goto NEXT_WALLET
 					}
 
 					log.Printf("fetched %d addrs from %s.%d", len(addrs), walletName, pageNum)
