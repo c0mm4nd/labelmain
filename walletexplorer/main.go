@@ -137,8 +137,13 @@ func main() {
 						models = append(models, model)
 					}
 
+				BULKWRITE:
 					results, err := coll.BulkWrite(ctx, models)
-					chk(err)
+					if retry(err) {
+						log.Println(err)
+						time.Sleep(defaultLastSleep)
+						goto BULKWRITE
+					}
 
 					log.Printf("%s.%s.%d: %d matched, %d upserted, %d modified", walletType, walletName, pageNum, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
 					if len(addrs) < 100 {
