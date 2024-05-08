@@ -1,4 +1,4 @@
-package tronscan
+package main
 
 import (
 	"context"
@@ -54,9 +54,10 @@ type Result struct {
 
 const alphabet = "123456789abcdefghijklmnopqrstuvwxyz_-"
 
-func search_tronscan(database *mongo.Database, search_type, term string, start int) {
+func search_tronscan(database *mongo.Database, search_type, term string) {
+	start := 0
 	total := 0
-START_CHANGE:
+	// START_CHANGE:
 	coll := database.Collection(fmt.Sprintf("tron%sLabels", cases.Title(language.English, cases.NoLower).String(search_type)))
 	token_url := fmt.Sprintf("https://apilist.tronscanapi.com/api/search/v2?term=%s&type=%s&start=%d&limit=50", term, search_type, start)
 RETRY:
@@ -106,21 +107,26 @@ RETRY:
 	if err != nil {
 		log.Println(err)
 	}
-	log.Printf("since %d: %d", start, result.Total)
+	log.Printf("since %d: %d", start, len(models))
 
-	total += result.Total
-	if result.Total == 50 {
-		start += 50
-		goto START_CHANGE
-	}
+	total += len(models)
+
+	// commented because tronscan api cannot change the start to larger than 50
+	// if len(models) == 50 {
+	// 	start += 50
+	// 	goto START_CHANGE
+	// }
 
 	if total == 0 {
+		log.Printf("end %s: 0", term)
 		return
+	} else {
+		log.Printf("done %s: %d", term, total)
 	}
 
 	for _, char := range alphabet {
 		nextTerm := term + string(char)
-		search_tronscan(database, search_type, nextTerm, start)
+		search_tronscan(database, search_type, nextTerm)
 	}
 }
 
@@ -157,5 +163,15 @@ func main() {
 	db := client.Database("labels")
 
 	// check from "" to arbitrarily length string. stop length increase when total is 0
-	search_tronscan(db, "token", "", 0)
+	for _, c0 := range alphabet {
+		go func(c0 rune) {
+			for _, c1 := range alphabet {
+				for _, c2 := range alphabet {
+					search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
+				}
+			}
+		}(c0)
+	}
 }
