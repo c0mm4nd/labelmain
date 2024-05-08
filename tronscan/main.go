@@ -164,14 +164,12 @@ func main() {
 
 	// check from "" to arbitrarily length string. stop length increase when total is 0
 	for _, c0 := range alphabet {
-		go func(c0 rune) {
-			for _, c1 := range alphabet {
-				for _, c2 := range alphabet {
-					search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
-					search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
-					search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
-				}
+		for _, c1 := range alphabet {
+			for _, c2 := range alphabet {
+				search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
+				search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
+				search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
 			}
-		}(c0)
+		}
 	}
 }
