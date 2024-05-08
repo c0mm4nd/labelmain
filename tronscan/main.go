@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -103,11 +104,13 @@ RETRY:
 		panic("unknown search type")
 	}
 
-	_, err = coll.BulkWrite(context.TODO(), models)
-	if err != nil {
-		log.Println(err)
+	if len(models) != 0 {
+		_, err = coll.BulkWrite(context.TODO(), models)
+		if err != nil {
+			log.Println(err)
+		}
+		log.Printf("since %d: %d", start, len(models))
 	}
-	log.Printf("since %d: %d", start, len(models))
 
 	total += len(models)
 
@@ -162,14 +165,21 @@ func main() {
 
 	db := client.Database("labels")
 
+	wg := sync.WaitGroup{}
 	// check from "" to arbitrarily length string. stop length increase when total is 0
 	for _, c0 := range alphabet {
-		for _, c1 := range alphabet {
-			for _, c2 := range alphabet {
-				search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
-				search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
-				search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
+		wg.Add(1)
+		go func(c0 rune) {
+			for _, c1 := range alphabet {
+				for _, c2 := range alphabet {
+					search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
+				}
 			}
-		}
+			wg.Done()
+		}(c0)
 	}
+
+	wg.Wait()
 }
