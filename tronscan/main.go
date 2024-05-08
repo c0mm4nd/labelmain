@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -51,9 +53,22 @@ type Result struct {
 	Address  []any  `json:"address"`
 	Contract []any  `json:"contract"`
 	Message  string `json:"message"`
+	Error    string `json:"error"`
 }
 
 const alphabet = "123456789abcdefghijklmnopqrstuvwxyz_-"
+
+func extractNumber(str string) int {
+	pattern := `\d+\s*s`
+	re := regexp.MustCompile(pattern)
+	match := re.FindString(str)
+	if match != "" {
+		match = strings.TrimSuffix(match, " s")
+		num, _ := strconv.Atoi(match)
+		return num
+	}
+	return 0
+}
 
 func search_tronscan(database *mongo.Database, search_type, term string) {
 	start := 0
@@ -77,6 +92,13 @@ RETRY:
 	if result.Message != "" {
 		log.Println(result.Message)
 		time.Sleep(lastSleep)
+		goto RETRY
+	}
+
+	if result.Error != "" {
+		log.Println(result.Error)
+		sleepTime := extractNumber(result.Error)
+		time.Sleep(time.Duration(sleepTime) * time.Second)
 		goto RETRY
 	}
 
@@ -121,7 +143,7 @@ RETRY:
 	// }
 
 	if total == 0 {
-		log.Printf("end %s: 0", term)
+		// log.Printf("end %s: 0", term)
 		return
 	} else {
 		log.Printf("done %s: %d", term, total)
@@ -165,21 +187,14 @@ func main() {
 
 	db := client.Database("labels")
 
-	wg := sync.WaitGroup{}
 	// check from "" to arbitrarily length string. stop length increase when total is 0
 	for _, c0 := range alphabet {
-		wg.Add(1)
-		go func(c0 rune) {
-			for _, c1 := range alphabet {
-				for _, c2 := range alphabet {
-					search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
-					search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
-					search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
-				}
+		for _, c1 := range alphabet {
+			for _, c2 := range alphabet {
+				search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
+				search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
+				search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
 			}
-			wg.Done()
-		}(c0)
+		}
 	}
-
-	wg.Wait()
 }
