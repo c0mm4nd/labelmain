@@ -40,8 +40,7 @@ func retry(err error) bool {
 	return false
 }
 
-var defaultLastSleep = 5 * time.Second
-var lastSleep = 5 * time.Second
+var defaultSleep = time.Minute
 
 var cache = ttlcache.New[string, struct{}](
 	ttlcache.WithTTL[string, struct{}](12 * time.Hour),
@@ -85,8 +84,7 @@ RETRY:
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if retry(err) {
-		lastSleep += defaultLastSleep
-		time.Sleep(lastSleep)
+		time.Sleep(defaultSleep)
 		goto RETRY
 	}
 	body, err := io.ReadAll(resp.Body)
@@ -96,13 +94,13 @@ RETRY:
 	json.Unmarshal(body, &result)
 
 	if result.Message != "" {
-		log.Println(result.Message)
-		time.Sleep(lastSleep)
+		log.Println("Message: ", result.Message)
+		time.Sleep(defaultSleep)
 		goto RETRY
 	}
 
 	if result.Error != "" {
-		log.Println(result.Error)
+		log.Println("Error: ", result.Error)
 		sleepTime := extractNumber(result.Error)
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 		goto RETRY
@@ -137,7 +135,6 @@ RETRY:
 		if err != nil {
 			log.Println(err)
 		}
-		log.Printf("since %d: %d", start, len(models))
 	}
 
 	total += len(models)
@@ -192,13 +189,28 @@ func main() {
 
 	db := client.Database("labels")
 
+	startPrefix := os.Getenv("TRONSCAN_START_PREFIX")
+	isStarted := false
+	if startPrefix == "" {
+		isStarted = true
+	}
+
 	// check from "" to arbitrarily length string. stop length increase when total is 0
 	for _, c0 := range alphabet {
 		for _, c1 := range alphabet {
 			for _, c2 := range alphabet {
-				search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
-				search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
-				search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
+				if startPrefix != "" {
+					if startPrefix == string(c0)+string(c1)+string(c2) {
+						isStarted = true
+					}
+				}
+
+				if isStarted {
+					search_tronscan(db, "token", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "address", string(c0)+string(c1)+string(c2))
+					search_tronscan(db, "contract", string(c0)+string(c1)+string(c2))
+				}
+
 			}
 		}
 	}
