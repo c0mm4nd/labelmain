@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jellydator/ttlcache/v3"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -36,17 +35,12 @@ func retry(err error) bool {
 var defaultLastSleep = 5 * time.Second
 var lastSleep = 5 * time.Second
 
-var cache = ttlcache.New[string, struct{}](
-	ttlcache.WithTTL[string, struct{}](12 * time.Hour),
-)
-
 func dump_protocols(database *mongo.Database) {
 	coll := database.Collection("defillamaLabels")
-	token_url := "https://apis.llama.fi/protocols"
+	token_url := "https://api.llama.fi/protocols"
 RETRY:
 	req, err := http.NewRequest("GET", token_url, nil)
 	chk(err)
-	req.Header.Set("X-API-KEY", os.Getenv("DAPPRADAR_API_KEY_1"))
 
 	time.Sleep(1 * time.Second / 5)
 	client := &http.Client{}
