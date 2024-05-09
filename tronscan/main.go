@@ -42,6 +42,7 @@ func retry(err error) bool {
 
 var defaultLastSleep = 5 * time.Second
 var lastSleep = 5 * time.Second
+var client = &http.Client{}
 
 var cache = ttlcache.New[string, struct{}](
 	ttlcache.WithTTL[string, struct{}](12 * time.Hour),
@@ -77,7 +78,10 @@ func search_tronscan(database *mongo.Database, search_type, term string) {
 	coll := database.Collection(fmt.Sprintf("tron%sLabels", cases.Title(language.English, cases.NoLower).String(search_type)))
 	token_url := fmt.Sprintf("https://apilist.tronscanapi.com/api/search/v2?term=%s&type=%s&start=%d&limit=50", term, search_type, start)
 RETRY:
-	resp, err := http.Get(token_url)
+	req, err := http.NewRequest("GET", token_url, nil)
+	chk(err)
+	req.Header.Set("TRON-PRO-API-KEY", os.Getenv("TRONSCAN_API_KEY"))
+	resp, err := client.Do(req)
 	if retry(err) {
 		lastSleep += defaultLastSleep
 		time.Sleep(lastSleep)
