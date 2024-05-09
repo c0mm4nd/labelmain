@@ -96,7 +96,7 @@ RETRY:
 		if err != nil {
 			log.Println(err)
 		}
-		log.Printf("since %d: %d", page, len(models))
+		log.Printf("since %d/%d: %d/%d", page, result.PageCount, total+len(models), result.ResultCount)
 	}
 
 	total += len(models)
