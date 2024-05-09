@@ -74,7 +74,7 @@ func extractNumber(str string) int {
 func search_tronscan(database *mongo.Database, search_type, term string) {
 	start := 0
 	total := 0
-	// START_CHANGE:
+START_CHANGE:
 	coll := database.Collection(fmt.Sprintf("tron%sLabels", cases.Title(language.English, cases.NoLower).String(search_type)))
 	token_url := fmt.Sprintf("https://apilist.tronscanapi.com/api/search/v2?term=%s&type=%s&start=%d&limit=50", term, search_type, start)
 RETRY:
@@ -140,11 +140,10 @@ RETRY:
 
 	total += len(models)
 
-	// commented because tronscan api cannot change the start to larger than 50
-	// if len(models) == 50 {
-	// 	start += 50
-	// 	goto START_CHANGE
-	// }
+	if len(models) == 50 {
+		start += 50
+		goto START_CHANGE
+	}
 
 	if total == 0 {
 		// log.Printf("end %s: 0", term)
