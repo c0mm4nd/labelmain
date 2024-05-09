@@ -81,6 +81,8 @@ RETRY:
 	req, err := http.NewRequest("GET", token_url, nil)
 	chk(err)
 	req.Header.Set("TRON-PRO-API-KEY", os.Getenv("TRONSCAN_API_KEY"))
+
+	time.Sleep(1 * time.Second / 5)
 	resp, err := client.Do(req)
 	if retry(err) {
 		lastSleep += defaultLastSleep
