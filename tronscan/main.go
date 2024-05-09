@@ -102,7 +102,12 @@ RETRY:
 	if result.Error != "" {
 		log.Println("Error: ", result.Error)
 		sleepTime := extractNumber(result.Error)
-		time.Sleep(time.Duration(sleepTime) * time.Second)
+		if sleepTime == 0 {
+			time.Sleep(defaultSleep)
+		} else {
+			time.Sleep(time.Duration(sleepTime) * time.Second)
+		}
+
 		goto RETRY
 	}
 
