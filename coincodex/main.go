@@ -148,13 +148,13 @@ func main() {
 		return
 	}
 
-	var result []map[string]any
+	var result Result
 	json.Unmarshal(body, &result)
 
 	// write as labels
-	models := make([]mongo.WriteModel, len(result))
-	for i, item := range result {
-		model := mongo.NewUpdateOneModel().SetUpsert(true).SetFilter(bson.M{"slug": item["slug"]}).SetUpdate(bson.M{"$set": item})
+	models := make([]mongo.WriteModel, len(result.Data))
+	for i, item := range result.Data {
+		model := mongo.NewUpdateOneModel().SetUpsert(true).SetFilter(bson.M{"slug": item.(map[string]any)["slug"]}).SetUpdate(bson.M{"$set": item})
 		models[i] = model
 	}
 
