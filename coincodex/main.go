@@ -167,8 +167,8 @@ func main() {
 	}
 
 	priceDB := client.Database("coincodexPrices")
-	for _, item := range result {
-		slug := item["slug"].(string)
+	for _, item := range result.Data {
+		slug := item.(map[string]any)["slug"].(string)
 		dump_prices(labelDB, priceDB, slug)
 	}
 }
