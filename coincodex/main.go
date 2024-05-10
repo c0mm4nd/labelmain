@@ -130,11 +130,23 @@ func main() {
 	}
 	fmt.Println("Pinged your deployment. You successfully connected to MongoDB!")
 
-	resp, err := http.Get("https://coincodex.com/api/v1/assets/get_asset_list?limit=100000000000000000000000000&order_by=last_market_cap_usd&order_direction=desc&type=crypto")
+	url := "https://coincodex.com/api/v1/assets/get_asset_list?limit=100000000000000000000000000&order_by=last_market_cap_usd&order_direction=desc&type=crypto"
+	req, err := http.NewRequest("GET", url, nil)
+	chk(err)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
 	chk(err)
 
 	body, err := io.ReadAll(resp.Body)
 	chk(err)
+
+	if resp.StatusCode >= 400 {
+		log.Printf("%d bad request", resp.StatusCode)
+		log.Println(string(body))
+		return
+	}
 
 	var result []map[string]any
 	json.Unmarshal(body, &result)
