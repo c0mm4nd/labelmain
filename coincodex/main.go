@@ -77,6 +77,7 @@ RETRY:
 	json.Unmarshal(body, &result)
 
 	// write coin
+	log.Println("writing coin", slug)
 	opt := options.Update().SetUpsert(true)
 	_, err = labelDB.Collection("coincodexCoinLabels").UpdateOne(context.TODO(), bson.M{"slug": slug}, bson.M{"$set": result.Coin}, opt)
 	if err != nil {
@@ -84,6 +85,7 @@ RETRY:
 	}
 
 	// write prices
+	log.Println("writing prices", slug)
 	models := make([]mongo.WriteModel, len(result.Data))
 	for i, item := range result.Data {
 		model := mongo.NewUpdateOneModel().SetUpsert(true).SetFilter(bson.M{"time_start": item.(map[string]any)["time_start"], "time_end": item.(map[string]any)["time_end"]}).SetUpdate(bson.M{"$set": item})
