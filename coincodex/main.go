@@ -86,21 +86,17 @@ RETRY:
 
 	// write prices
 	log.Println("writing prices", slug)
-	// models := make([]mongo.WriteModel, len(result.Data))
-	// for i, item := range result.Data {
-	// 	model := mongo.NewUpdateOneModel().SetUpsert(true).SetFilter(bson.M{"time_start": item.(map[string]any)["time_start"], "time_end": item.(map[string]any)["time_end"]}).SetUpdate(bson.M{"$set": item})
-	// 	models[i] = model
-	// }
+	models := make([]mongo.WriteModel, len(result.Data))
+	for i, item := range result.Data {
+		model := mongo.NewUpdateOneModel().SetUpsert(true).SetFilter(bson.M{"time_start": item.(map[string]any)["time_start"], "time_end": item.(map[string]any)["time_end"]}).SetUpdate(bson.M{"$set": item})
+		models[i] = model
+	}
 
-	// if len(models) != 0 {
-	// 	_, err = priceDB.Collection(slug).BulkWrite(context.TODO(), models)
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 	}
-	// }
-	_, err = priceDB.Collection("coincodex").UpdateOne(context.TODO(), bson.M{"slug": slug}, bson.M{"$set": result}, opt)
-	if err != nil {
-		log.Println(err)
+	if len(models) != 0 {
+		_, err = priceDB.Collection(slug).BulkWrite(context.TODO(), models)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	log.Printf("fetched %d prices from %s", len(result.Data), slug)
@@ -172,7 +168,7 @@ func main() {
 		}
 	}
 
-	priceDB := client.Database("prices")
+	priceDB := client.Database("coincodexPrcies")
 	for _, item := range result.Data {
 		slug := item.(map[string]any)["slug"].(string)
 		dump_prices(labelDB, priceDB, slug)
