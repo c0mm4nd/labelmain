@@ -249,8 +249,16 @@ ADDR_LIST_RETRY:
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp.StatusCode == 429 {
+	if err != nil {
+		log.Printf("Failed to read error response body: %v, sleeping %v", err, lastSleep)
+		time.Sleep(lastSleep)
+		lastSleep += time.Second
+		goto ADDR_LIST_RETRY
+	}
+	
+	if resp.StatusCode == 429 {
 		log.Printf("API request failed (status: %d), sleeping %v", resp.StatusCode, lastSleep)
+		resp.Body.Close()
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
 		goto ADDR_LIST_RETRY
@@ -305,6 +313,38 @@ ADDR_LIST_RETRY:
 }
 
 func loadWalletMap() map[string][]string {
+	const walletMapFile = "walletexplorer_wallet_map.json"
+	
+	// Try to load from local file first
+	if data, err := os.ReadFile(walletMapFile); err == nil {
+		var wallets map[string][]string
+		if json.Unmarshal(data, &wallets) == nil {
+			log.Printf("Loaded wallet map from local file: %s", walletMapFile)
+			return wallets
+		}
+		log.Printf("Failed to parse local wallet map file, fetching from web...")
+	} else {
+		log.Printf("Local wallet map file not found, fetching from web...")
+	}
+
+	// Fetch from web if local file doesn't exist or is invalid
+	wallets := fetchWalletMapFromWeb()
+	
+	// Save to local file for future use
+	if data, err := json.MarshalIndent(wallets, "", "  "); err == nil {
+		if err := os.WriteFile(walletMapFile, data, 0644); err == nil {
+			log.Printf("Saved wallet map to local file: %s", walletMapFile)
+		} else {
+			log.Printf("Failed to save wallet map to file: %v", err)
+		}
+	} else {
+		log.Printf("Failed to marshal wallet map: %v", err)
+	}
+
+	return wallets
+}
+
+func fetchWalletMapFromWeb() map[string][]string {
 	lastSleep := defaultLastSleep
 
 	wallets := make(map[string][]string)
