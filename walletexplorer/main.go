@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -36,6 +37,24 @@ func retry(err error) bool {
 }
 
 var defaultLastSleep = 20 * time.Second
+
+// WalletAddressResponse represents the API response structure
+type WalletAddressResponse struct {
+	Found          bool      `json:"found"`
+	Error          string    `json:"error,omitempty"`
+	Label          string    `json:"label"`
+	WalletID       string    `json:"wallet_id"`
+	AddressesCount int       `json:"addresses_count"`
+	Addresses      []Address `json:"addresses"`
+	UpdatedToBlock int       `json:"updated_to_block"`
+}
+
+type Address struct {
+	Address        string  `json:"address"`
+	Balance        float64 `json:"balance"`
+	IncomingTxs    int     `json:"incoming_txs"`
+	LastUsedInBlock int    `json:"last_used_in_block"`
+}
 
 func main() {
 	flag.Parse()
@@ -77,7 +96,7 @@ func main() {
 
 	for {
 		for walletType, walletNames := range walletMap {
-			log.Println(strings.Join(walletNames, ", "))
+			log.Printf("Processing wallet type '%s' with %d wallets: %s", walletType, len(walletNames), strings.Join(walletNames, ", "))
 
 			ctx := context.TODO()
 			for _, walletName := range walletNames {
@@ -85,38 +104,15 @@ func main() {
 					continue
 				}
 
-				pageNum := uint32(1)
+				from := 0
+				const count = 100
 
-				// addrs := loadAddrsByWalletName(walletName)
-				// if len(addrs) == 0 {
-				// 	log.Printf("failed to load address from %s.%s", walletType, walletName)
-				// 	return
-				// }
+				for {
+					addrs := loadAddrsByWalletNameAndFrom(walletName, from, count)
+					if len(addrs) == 0 {
+						break
+					}
 
-				// models := make([]mongo.WriteModel, 0, len(addrs))
-				// for _, addr := range addrs {
-				// 	doc := bson.M{
-				// 		"$set": bson.M{"addr": addr},
-				// 		"$addToSet": bson.M{
-				// 			"labels": bson.A{bson.M{
-				// 				"name": walletName,
-				// 				"type": walletType,
-				// 				"src":  "walletExplorer",
-				// 			}},
-				// 		},
-				// 	}
-
-				// 	model := mongo.NewUpdateOneModel()
-				// 	model.SetUpsert(true)
-				// 	model.SetFilter(bson.M{"addr": addr})
-				// 	model.SetUpdate(doc)
-				// 	models = append(models, model)
-				// }
-
-				// results, err := coll.BulkWrite(ctx, models)
-				// chk(err)
-				for ; ; pageNum += 1 {
-					addrs := loadAddrsByWalletNameAndPageNum(walletName, pageNum)
 					models := make([]mongo.WriteModel, 0, len(addrs))
 					for _, addr := range addrs {
 						doc := bson.M{
@@ -145,15 +141,16 @@ func main() {
 						goto BULKWRITE
 					}
 
-					log.Printf("%s.%s.%d: %d matched, %d upserted, %d modified", walletType, walletName, pageNum, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
-					if len(addrs) < 100 {
-						goto NEXT_WALLET
+					log.Printf("%s.%s.%d: %d matched, %d upserted, %d modified", walletType, walletName, from, results.MatchedCount, results.UpsertedCount, results.ModifiedCount)
+					
+					// If we got fewer than 100 addresses, we've reached the end
+					if len(addrs) < count {
+						break
 					}
 
-					log.Printf("fetched %d addrs from %s.%d", len(addrs), walletName, pageNum)
+					from += count
+					log.Printf("fetched %d addrs from %s, moving to from=%d", len(addrs), walletName, from)
 				}
-
-			NEXT_WALLET:
 
 				log.Printf("done %s.%s", walletType, walletName)
 			}
@@ -240,74 +237,69 @@ func loadAddrsByWalletName(walletName string) []string {
 	return addrs
 }
 
-func loadAddrsByWalletNameAndPageNum(walletName string, pageNum uint32) []string {
+// loadAddrsByWalletNameAndFrom fetches addresses using the WalletExplorer API
+func loadAddrsByWalletNameAndFrom(walletName string, from, count int) []string {
 	addrs := make([]string, 0)
-
 	lastSleep := defaultLastSleep
 
-	url := fmt.Sprintf("https://www.walletexplorer.com/wallet/%s/addresses?page=%d", walletName, pageNum)
+	url := fmt.Sprintf("https://www.walletexplorer.com/api/1/wallet-addresses?wallet=%s&from=%d&count=%d", walletName, from, count)
+
 ADDR_LIST_RETRY:
 	req, _ := http.NewRequest("GET", url, nil)
-	// avoid limit
-	req.Header.Set("Host", "www.walletexplorer.com")
-	req.Header.Set("Referer", url)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
-	if retry(err) {
-		log.Println("sleep", lastSleep)
+	if err != nil || resp.StatusCode == 429 {
+		log.Printf("API request failed (status: %d), sleeping %v", resp.StatusCode, lastSleep)
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
-
 		goto ADDR_LIST_RETRY
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-	if retry(err) {
-		log.Println("sleep", lastSleep)
+	if err != nil {
+		log.Printf("Failed to read response body: %v, sleeping %v", err, lastSleep)
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
-
 		goto ADDR_LIST_RETRY
 	}
 
-	if bytes.Contains(body, []byte("limit")) {
-		log.Println("sleep due to limit", lastSleep)
+	// Check for rate limit or error messages in response body
+	if bytes.Contains(body, []byte("limit")) || bytes.Contains(body, []byte("Too many requests")) {
+		log.Printf("Rate limit detected, sleeping %v", lastSleep)
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
-
 		goto ADDR_LIST_RETRY
 	}
 
-	if bytes.Contains(body, []byte("Too many requests")) {
-		log.Println("sleep due to too many requests", lastSleep)
+	var apiResp WalletAddressResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		log.Printf("Failed to parse JSON response: %v, sleeping %v", err, lastSleep)
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
-
 		goto ADDR_LIST_RETRY
 	}
 
-	doc, err := htmlquery.Parse(bytes.NewBuffer(body))
-	if retry(err) {
-		log.Println("sleep", lastSleep)
-		time.Sleep(lastSleep)
-		lastSleep += time.Second
-
-		goto ADDR_LIST_RETRY
+	// Check if the API call was successful
+	if !apiResp.Found {
+		if apiResp.Error != "" {
+			log.Printf("API error for wallet %s: %s", walletName, apiResp.Error)
+		} else {
+			log.Printf("Wallet %s not found", walletName)
+		}
+		return addrs // Return empty slice
 	}
 
-	tds := htmlquery.Find(doc, "//table/tbody/tr/td[1]")
-	for _, td := range tds {
-		addr := htmlquery.InnerText(td)
-		addrs = append(addrs, addr)
+	// Extract addresses from the API response
+	for _, addr := range apiResp.Addresses {
+		addrs = append(addrs, addr.Address)
 	}
 
-	log.Printf("fetched %d addrs from %s.%d", len(tds), walletName, pageNum)
+	log.Printf("fetched %d addrs from %s (from=%d, total_count=%d)", len(addrs), walletName, from, apiResp.AddressesCount)
 
-	// 	if len(tds) < 100 {
-	// 		break
-	// 	}
-	// }
+	// Add a small delay to respect rate limits (2 requests/sec)
+	time.Sleep(500 * time.Millisecond)
 
 	return addrs
 }
