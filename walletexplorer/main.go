@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -37,6 +38,23 @@ func retry(err error) bool {
 }
 
 var defaultLastSleep = 20 * time.Second
+
+// Create HTTP client with timeout to prevent hanging connections
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
+// logMemoryUsage logs current memory usage statistics
+func logMemoryUsage() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	log.Printf("Memory Usage - Alloc: %d KB, TotalAlloc: %d KB, Sys: %d KB, NumGC: %d",
+		bToKb(m.Alloc), bToKb(m.TotalAlloc), bToKb(m.Sys), m.NumGC)
+}
+
+func bToKb(b uint64) uint64 {
+	return b / 1024
+}
 
 // WalletAddressResponse represents the API response structure
 type WalletAddressResponse struct {
@@ -91,6 +109,9 @@ func main() {
 
 	walletMap := loadWalletMap()
 	log.Println(walletMap)
+	
+	// Log initial memory usage
+	logMemoryUsage()
 
 	ticker := time.NewTicker(8 * time.Hour)
 
@@ -150,13 +171,26 @@ func main() {
 
 					from += count
 					log.Printf("fetched %d addrs from %s, moving to from=%d", len(addrs), walletName, from)
+					
+					// Clear references to help garbage collection
+					addrs = nil
+					models = nil
 				}
 
 				log.Printf("done %s.%s", walletType, walletName)
+				
+				// Force garbage collection after processing each wallet to free memory
+				runtime.GC()
 			}
 		}
 
 		log.Println("today done")
+		
+		// Log memory usage after processing all wallets
+		logMemoryUsage()
+		// Force garbage collection after processing all wallets
+		runtime.GC()
+		logMemoryUsage()
 
 		<-ticker.C
 	}
@@ -178,14 +212,18 @@ func loadAddrsByWalletName(walletName string) []string {
 		req.Header.Set("Referer", url)
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if retry(err) {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			log.Println("sleep", lastSleep)
 			time.Sleep(lastSleep)
 			lastSleep += time.Second
 
 			goto ADDR_LIST_RETRY
 		}
+		defer resp.Body.Close() // Ensure response body is always closed
 
 		body, err := io.ReadAll(resp.Body)
 		if retry(err) {
@@ -239,7 +277,7 @@ func loadAddrsByWalletName(walletName string) []string {
 
 // loadAddrsByWalletNameAndFrom fetches addresses using the WalletExplorer API
 func loadAddrsByWalletNameAndFrom(walletName string, from, count int) []string {
-	addrs := make([]string, 0)
+	addrs := make([]string, 0, count) // Pre-allocate capacity for expected count
 	lastSleep := defaultLastSleep
 
 	url := fmt.Sprintf("https://www.walletexplorer.com/api/1/wallet-addresses?wallet=%s&from=%d&count=%d", walletName, from, count)
@@ -248,7 +286,7 @@ ADDR_LIST_RETRY:
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to read error response body: %v, sleeping %v", err, lastSleep)
 		time.Sleep(lastSleep)
@@ -308,6 +346,11 @@ ADDR_LIST_RETRY:
 
 	// Add a small delay to respect rate limits (2 requests/sec)
 	time.Sleep(500 * time.Millisecond)
+	
+	// Periodically log memory usage during heavy processing
+	if from%1000 == 0 && from > 0 {
+		logMemoryUsage()
+	}
 
 	return addrs
 }
@@ -348,6 +391,10 @@ func fetchWalletMapFromWeb() map[string][]string {
 	lastSleep := defaultLastSleep
 
 	wallets := make(map[string][]string)
+	
+	// Compile regex once outside the loop to avoid repeated compilation
+	exp, err := regexp.Compile("/wallet/([\\w_.-]+)\"")
+	chk(err)
 
 	url := "https://www.walletexplorer.com/"
 LOAD_ALL_RETRY:
@@ -356,13 +403,18 @@ LOAD_ALL_RETRY:
 	req.Header.Set("Referer", url)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if retry(err) {
+		if resp != nil {
+			resp.Body.Close()
+		}
 		time.Sleep(lastSleep)
 		lastSleep += time.Second
 
 		goto LOAD_ALL_RETRY
 	}
+	defer resp.Body.Close() // Ensure response body is always closed
+	
 	doc, err := htmlquery.Parse(resp.Body)
 	if retry(err) {
 		time.Sleep(lastSleep)
@@ -376,15 +428,21 @@ LOAD_ALL_RETRY:
 	tds := htmlquery.Find(doc, "//table/tbody/tr/td")
 	for _, td := range tds {
 		h3 := td.FirstChild
+		if h3 == nil {
+			continue
+		}
 		walletTypeWithColon := htmlquery.InnerText(h3)
+		if len(walletTypeWithColon) == 0 {
+			continue
+		}
 		walletType := strings.ToLower(walletTypeWithColon)[:len(walletTypeWithColon)-1]
 		ul := td.LastChild
-
-		exp, err := regexp.Compile("/wallet/([\\w_.-]+)\"")
-		chk(err)
+		if ul == nil {
+			continue
+		}
 
 		matchedHrefs := exp.FindAllStringSubmatch(htmlquery.OutputHTML(ul, true), -1)
-		wallets[walletType] = make([]string, len(matchedHrefs))
+		wallets[walletType] = make([]string, 0, len(matchedHrefs)) // Pre-allocate capacity, not length
 		for _, matched := range matchedHrefs {
 			name := strings.TrimSpace(matched[1])
 			if len(name) > 0 {
