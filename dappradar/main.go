@@ -62,7 +62,7 @@ PAGE_CHANGE:
 RETRY:
 	req, err := http.NewRequest("GET", token_url, nil)
 	chk(err)
-	req.Header.Set("X-API-KEY", os.Getenv("DAPPRADAR_API_KEY_1"))
+	req.Header.Set("X-API-KEY", os.Getenv("DAPPRADAR_API_KEY"))
 
 	time.Sleep(1 * time.Second / 5)
 	client := &http.Client{}
@@ -107,6 +107,9 @@ RETRY:
 	}
 }
 
+// chain flag
+var chain = flag.String("chain", "tron", "Chain to collect dapps for (e.g., tron, ethereum, etc.)")
+
 func main() {
 	flag.Parse()
 
@@ -139,6 +142,8 @@ func main() {
 
 	db := client.Database("labels")
 
-	// check from "" to arbitrarily length string. stop length increase when total is 0
-	dump_dapps(db, "tron", 1)
+	log.Println("This tool only collects dapps from dappradar, not the address labels")
+	log.Println("You must have a PRO account to gather the addresses")
+
+	dump_dapps(db, *chain, 1)
 }
