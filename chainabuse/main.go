@@ -280,9 +280,9 @@ func main() {
 	}
 
 	// Connect to MongoDB
-	mongoURI := os.Getenv("DIRTY_MONGO_URI")
+	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		log.Fatal("DIRTY_MONGO_URI environment variable is required")
+		log.Fatal("MONGO_URI environment variable is required")
 	}
 
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
